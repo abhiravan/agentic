@@ -1,0 +1,20 @@
+{
+  "mcpServers": [
+    {
+      "name": "github",
+      "url": "https://github.com/abhiravan/agentic",
+      "type": "github",
+      "auth": {
+        "user": "${GITHUB_USER}",
+        "token": "${GITHUB_TOKEN}"
+      },
+      "tools": [
+        "version-control",
+        "pull-request",
+        "issue-tracker",
+        "code-search",
+        "branch-management"
+      ]
+    }
+  ]
+}

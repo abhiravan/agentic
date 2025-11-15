@@ -1,7 +1,9 @@
+
 from flask import Flask, render_template, request, jsonify
 import os
 import requests
 from dotenv import load_dotenv
+from mcp_bugfix import run_mcp_bugfix
 
 load_dotenv()
 
@@ -72,20 +74,15 @@ def adf_to_text(adf):
     walk(adf)
     return ''.join(result).strip()
 
+
 @app.route('/fix_issue', methods=['POST'])
 def fix_issue():
     data = request.get_json()
     jira_number = data.get('jira_number', '')
     summary = data.get('summary', '')
     description = data.get('description', '')
-    # Placeholder for actual fix logic
-    status_steps = [
-        f"Received request to fix {jira_number}",
-        "Analyzing issue...",
-        "Generating fix plan...",
-        "Ready for next steps."
-    ]
-    return jsonify({'status_steps': status_steps, 'message': 'Fix workflow initiated.'})
+    status_steps, message = run_mcp_bugfix(jira_number, summary, description)
+    return jsonify({'status_steps': status_steps, 'message': message})
 
 def fetch_jira_issue(jira_number):
     url = f"{JIRA_URL}/rest/api/3/issue/{jira_number}"
