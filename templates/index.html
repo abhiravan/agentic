@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Fetch and Fix Agent</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Arial, sans-serif;
+            background: #f7f9fa;
+            margin: 0;
+            padding: 0;
+        }
+        .container {
+            background: #fff;
+            max-width: 540px;
+            margin: 40px auto 0 auto;
+            border-radius: 12px;
+            box-shadow: 0 2px 12px rgba(0,0,0,0.08);
+            padding: 32px 36px 28px 36px;
+        }
+        h1 {
+            text-align: center;
+            color: #2d3a4a;
+            margin-bottom: 28px;
+            font-size: 2.1em;
+            letter-spacing: 1px;
+        }
+        label {
+            display: block;
+            margin-top: 18px;
+            color: #3a4a5d;
+            font-weight: 500;
+        }
+        input[type="text"], textarea {
+            margin-top: 7px;
+            padding: 8px 10px;
+            width: 100%;
+            border: 1px solid #cfd8dc;
+            border-radius: 5px;
+            font-size: 1em;
+            background: #f9fbfc;
+            color: #2d3a4a;
+            box-sizing: border-box;
+            resize: none;
+        }
+        textarea {
+            min-height: 90px;
+            font-family: inherit;
+        }
+        .btn-row {
+            display: flex;
+            justify-content: flex-end;
+            gap: 12px;
+            margin-top: 22px;
+        }
+        button {
+            padding: 8px 22px;
+            font-size: 1em;
+            border: none;
+            border-radius: 5px;
+            background: #1976d2;
+            color: #fff;
+            cursor: pointer;
+            transition: background 0.18s;
+        }
+        button[type="submit"] {
+            background: #43a047;
+        }
+        button:active {
+            background: #125ea2;
+        }
+        button[disabled] {
+            background: #b0bec5;
+            cursor: not-allowed;
+        }
+        .error {
+            color: #d32f2f;
+            margin-top: 10px;
+        }
+        #status {
+            margin-top: 28px;
+            background: #f1f8e9;
+            border: 1px solid #c5e1a5;
+            border-radius: 6px;
+            padding: 16px 14px;
+            min-height: 32px;
+            color: #33691e;
+            font-size: 1em;
+            word-break: break-word;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Fetch and Fix Agent</h1>
+        <form method="post" id="fetchForm" onsubmit="return fetchJira(event)">
+            <label for="jira_number">Jira Number (e.g., PROJ-123):</label>
+            <input type="text" id="jira_number" name="jira_number" required value="{{ request.form.jira_number or '' }}" />
+            <div id="result">
+                {% if error %}
+                    <div class="error">{{ error }}</div>
+                {% endif %}
+                <label for="summary">Summary:</label>
+                <input type="text" id="summary" name="summary" value="" readonly>
+                <label for="description">Description:</label>
+                <textarea id="description" name="description" rows="8" readonly></textarea>
+            </div>
+            <div class="btn-row">
+                <button type="submit">Fetch Jira</button>
+                <button type="button" id="fixBtn" onclick="fixIssue()">Fix Issue</button>
+            </div>
+        </form>
+        <div id="status"></div>
+    </div>
+    <script>
+    function setStatus(msg) {
+        document.getElementById('status').innerHTML += msg + '<br/>';
+    }
+    function clearStatus() {
+        document.getElementById('status').innerHTML = '';
+    }
+    // Clear summary and description on page load
+    window.onload = function() {
+        document.getElementById('summary').value = '';
+        document.getElementById('description').value = '';
+    };
+
+    function fetchJira(event) {
+        event.preventDefault();
+        clearStatus();
+        const jiraNumber = document.getElementById('jira_number').value.trim();
+        if (!jiraNumber) {
+            setStatus('Please enter a Jira number.');
+            return false;
+        }
+        setStatus('Fetching Jira details...');
+        fetch('/fetch_jira', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ jira_number: jiraNumber })
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.error) {
+                setStatus(data.error);
+                document.getElementById('summary').value = '';
+                document.getElementById('description').value = '';
+            } else {
+                document.getElementById('summary').value = data.summary || '';
+                document.getElementById('description').value = data.description || '';
+                setStatus('Jira details fetched.');
+            }
+        })
+        .catch(() => setStatus('Error fetching Jira details.'));
+        return false;
+    }
+    function fixIssue() {
+        const jiraNumber = document.getElementById('jira_number').value.trim();
+        const summary = document.getElementById('summary').value;
+        const description = document.getElementById('description').value;
+        if (!jiraNumber) {
+            alert('Please enter a Jira number first.');
+            return;
+        }
+        clearStatus();
+        setStatus('Starting bug fix workflow for ' + jiraNumber + '...');
+        fetch('/fix_issue', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ jira_number: jiraNumber, summary: summary, description: description })
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.status_steps) {
+                data.status_steps.forEach(step => setStatus(step));
+            }
+            setStatus(data.message);
+        })
+        .catch(() => {
+            setStatus('Error triggering bug fix workflow.');
+        });
+    }
+    </script>
+</body>
+</html>
