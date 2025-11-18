@@ -105,11 +105,7 @@ def run_mcp_bugfix(jira_number, summary, description):
         status_steps.append("Checking out main and pulling latest changes...")
         subprocess.run(["git", "checkout", "main"], check=True)
         subprocess.run(["git", "pull"], check=True)
-        # 2. Create feature branch
-        status_steps.append(f"Creating/updating feature branch {branch}...")
-        subprocess.run(["git", "checkout", "-B", branch], check=True)
-
-        # 3. Find the most relevant file to fix (AI)
+        # 2. AI: Select the most relevant file to fix
         status_steps.append("AI: Selecting the most relevant file to fix...")
         candidate_files = [f for f in os.listdir('.') if f.endswith('.py') or f.endswith('.sql')]
         best_file = ai_select_file(summary, description, candidate_files)
@@ -117,25 +113,27 @@ def run_mcp_bugfix(jira_number, summary, description):
             raise Exception("No candidate file found to apply the fix.")
         status_steps.append(f"Selected file for fix: {best_file}")
 
-        # 4. AI: Generate the code patch
+        # 3. AI: Generate the code patch
         with open(best_file, 'r', encoding='utf-8') as f:
             old_code = f.read()
         new_code = ai_generate_patch(summary, description, old_code)
         if new_code == old_code:
             status_steps.append("AI did not generate any changes. No fix applied.")
             return status_steps, "No code changes were made."
+        status_steps.append(f"Creating/updating feature branch {branch}...")
+        subprocess.run(["git", "checkout", "-B", branch], check=True)
         with open(best_file, 'w', encoding='utf-8') as f:
             f.write(new_code)
         status_steps.append(f"Applied AI-generated fix to {best_file}.")
 
-        # 5. Stage and commit
+        # 4. Stage and commit
         subprocess.run(["git", "add", best_file], check=True)
         subprocess.run(["git", "commit", "-m", commit_msg], check=True)
         status_steps.append(f"Committed fix with message: {commit_msg}")
-        # 6. Push branch
+        # 5. Push branch
         subprocess.run(["git", "push", "--set-upstream", "origin", branch], check=True)
         status_steps.append(f"Pushed branch {branch} to origin.")
-        # 7. Create PR using GitHub CLI (gh)
+        # 6. Create PR using GitHub CLI (gh)
         status_steps.append("Creating PR via GitHub CLI...")
         pr_result = subprocess.run([
             "gh", "pr", "create",
