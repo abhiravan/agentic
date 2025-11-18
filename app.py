@@ -2,7 +2,8 @@ from flask import Flask, render_template, request, jsonify
 import os
 import requests
 from dotenv import load_dotenv
-from mcp_bugfix import run_mcp_bugfix, ai_select_file
+from mcp_bugfix import run_mcp_bugfix, ai_select_file, ai_generate_patch
+from github_client import GitHubClient
 
 load_dotenv()
 
@@ -80,8 +81,42 @@ def fix_issue():
     jira_number = data.get('jira_number', '')
     summary = data.get('summary', '')
     description = data.get('description', '')
-    status_steps, message = run_mcp_bugfix(jira_number, summary, description)
-    return jsonify({'status_steps': status_steps, 'message': message})
+    status_steps = [f"Received request to fix {jira_number}"]
+    GITHUB_TOKEN = os.getenv("GITHUB_TOKEN")
+    REPO = "abhiravan/agentic"
+    github_client = GitHubClient(GITHUB_TOKEN, REPO)
+    try:
+        candidate_files = [f for f in os.listdir('.') if f.endswith('.py') or f.endswith('.sql')]
+        best_file = ai_select_file(summary, description, candidate_files)
+        if not best_file:
+            status_steps.append("No candidate file found to apply the fix.")
+            return jsonify({'status_steps': status_steps, 'message': 'No code changes were made.'})
+        status_steps.append(f"Selected file for fix: {best_file}")
+        with open(best_file, 'r', encoding='utf-8') as f:
+            old_code = f.read()
+        new_code = ai_generate_patch(summary, description, old_code)
+        if new_code == old_code:
+            status_steps.append("AI did not generate any changes. No fix applied.")
+            return jsonify({'status_steps': status_steps, 'message': 'No code changes were made.'})
+        # 1. Create branch
+        branch = f"fb_{jira_number}"
+        github_client.create_branch(branch, from_branch="main")
+        status_steps.append(f"Created branch {branch}.")
+        # 2. Update file in branch
+        github_client.update_file(best_file, new_code, branch, f"fix({jira_number}): {summary}")
+        status_steps.append(f"Updated {best_file} in branch {branch}.")
+        # 3. Create PR
+        pr = github_client.create_pull_request(
+            title=f"fix({jira_number}): {summary}",
+            body=description,
+            head=branch,
+            base="main"
+        )
+        status_steps.append(f"PR created: {pr.get('html_url', pr.get('url'))}")
+        return jsonify({'status_steps': status_steps, 'message': f"PR created: {pr.get('html_url', pr.get('url'))}"})
+    except Exception as e:
+        status_steps.append(f"Error: {str(e)}")
+        return jsonify({'status_steps': status_steps, 'message': f"Failed to trigger fix workflow: {str(e)}"})
 
 @app.route('/find_source', methods=['POST'])
 def find_source():
