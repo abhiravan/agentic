@@ -48,23 +48,35 @@ def ai_generate_patch(jira_summary, jira_description, old_code):
     Enhanced: Handles DataFrame columns, SQL SELECT, and .withColumn chains for column addition.
     """
     import re
-    # Try to extract column names to add from the Jira description or AI suggestion in comments
+    # Try to extract column names to add/remove from the Jira description or AI suggestion in comments
     columns_to_add = []
-    # 1. Look for explicit column addition in Jira description
+    columns_to_remove = []
+    # 1. Look for explicit column addition/removal in Jira description
     add_column_pattern = re.compile(r"(?:add|missing|include)\s+column[s]?\s*([A-Za-z0-9_', ]+)", re.IGNORECASE)
-    match = add_column_pattern.search(jira_description)
-    if match:
-        columns_to_add = [c.strip(" '") for c in match.group(1).split(',') if c.strip()]
+    remove_column_pattern = re.compile(r"remove\s+column[s]?\s*([A-Za-z0-9_', ]+)", re.IGNORECASE)
+    match_add = add_column_pattern.search(jira_description)
+    match_remove = remove_column_pattern.search(jira_description)
+    if match_add:
+        columns_to_add = [c.strip(" '") for c in match_add.group(1).split(',') if c.strip()]
+    if match_remove:
+        columns_to_remove = [c.strip(" '") for c in match_remove.group(1).split(',') if c.strip()]
     # 2. Look for AI suggestion in code comments
     ai_suggestion_pattern = re.compile(r"AI Suggestion.*?:.*?(add|include|missing)[^\n]*column[s]?[^:]*: ([A-Za-z0-9_', ]+)", re.IGNORECASE)
-    ai_match = ai_suggestion_pattern.search(old_code)
-    if ai_match:
-        ai_cols = [c.strip(" '") for c in ai_match.group(2).split(',') if c.strip()]
+    ai_remove_pattern = re.compile(r"AI Suggestion.*?:.*?remove[^\n]*column[s]?[^:]*: ([A-Za-z0-9_', ]+)", re.IGNORECASE)
+    ai_match_add = ai_suggestion_pattern.search(old_code)
+    ai_match_remove = ai_remove_pattern.search(old_code)
+    if ai_match_add:
+        ai_cols = [c.strip(" '") for c in ai_match_add.group(2).split(',') if c.strip()]
         for col in ai_cols:
             if col not in columns_to_add:
                 columns_to_add.append(col)
+    if ai_match_remove:
+        ai_cols = [c.strip(" '") for c in ai_match_remove.group(1).split(',') if c.strip()]
+        for col in ai_cols:
+            if col not in columns_to_remove:
+                columns_to_remove.append(col)
     # 3. If still nothing, look for missing columns in DataFrame assignments
-    if not columns_to_add:
+    if not columns_to_add and not columns_to_remove:
         # Try to find selected_columns assignment and see if any columns are referenced elsewhere but missing
         import ast
         try:
@@ -89,7 +101,7 @@ def ai_generate_patch(jira_summary, jira_description, old_code):
                                     columns_to_add.append(col)
         except Exception:
             pass
-    if not columns_to_add:
+    if not columns_to_add and not columns_to_remove:
         return old_code
     code = old_code
     # 1. DataFrame column list (Python)
@@ -103,11 +115,16 @@ def ai_generate_patch(jira_summary, jira_description, old_code):
                 new_lines.append(line)
                 continue
             if in_columns and ']]' in line:
-                # Insert new columns before closing
+                # Insert new columns before closing (add)
                 for col in columns_to_add:
                     col_str = col.strip(" '")
                     if f"'{col_str}'" not in ''.join(new_lines):
                         new_lines.append(f"    '{col_str}',")
+                # Remove columns (remove)
+                for col in columns_to_remove:
+                    col_str = col.strip(" '")
+                    # Remove any line with this column
+                    new_lines = [l for l in new_lines if f"'{col_str}'" not in l]
                 in_columns = False
             new_lines.append(line)
         code = '\n'.join(new_lines)
