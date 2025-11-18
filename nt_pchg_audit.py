@@ -149,6 +149,7 @@ from pyspark.sql.functions import concat_ws
 from pyspark.sql.functions import current_timestamp
 selected_columns = df_pchg_audtt[[
     'ROG', 'PRICE_AREA', 'PRICE_GROUP_ID', 'NEW_PRICE', 'NEW_PRICE_EFFECTIVE_DATE',
+    'NEXT_PRICE', 'NEXT_PRICE_EFFECTIVE_DATE',
     'CURRENT_PRICE', 'CALCULATED_PRICE', 'CURRENT_COST', 'CURRENT_COST_EFFECTIVE_DATE',
     'FUTURE_COST', 'FUTURE_COST_EFFECTIVE_DATE',
     'MULTI_FACTOR_PRICE', 'MULTI_FACTOR_QUANTITY',
@@ -178,8 +179,12 @@ def generateauditEventsJson(df_data):
                 F.struct(
                     F.col('NEW_PRICE').alias('newPrice'),
                     F.col('NEW_PRICE_EFFECTIVE_DATE').alias('newPriceEffectiveDate'),
+                    F.col('NEXT_PRICE').alias('nextPrice'),
+                    F.col('NEXT_PRICE_EFFECTIVE_DATE').alias('nextPriceEffectiveDate'),
                     F.col('MULTI_FACTOR_PRICE').alias('multiFactorPrice'),
                     F.col('MULTI_FACTOR_QUANTITY').alias('multiFactorQuantity'),
+                F.col('NEXT_PRICE').alias('nextPrice'),
+                F.col('NEXT_PRICE_EFFECTIVE_DATE').alias('nextPriceEffectiveDate'),
                     F.col('WORKFLOW_TIME_STAMP').alias('workflowTs'),
                     F.col('WORKFLOW_STATE').alias('workflowState'),
                     F.col('WORKFLOW_TRANSITION_COMMENTS').alias('workflowTransitionComments')
@@ -202,6 +207,8 @@ def generateauditEventsJson(df_data):
                 F.col('FUTURE_COST_EFFECTIVE_DATE').alias('futureCostEffectiveDate'),
                 F.col('MULTI_FACTOR_PRICE').alias('multiFactorPrice'),
                 F.col('MULTI_FACTOR_QUANTITY').alias('multiFactorQuantity'),
+                F.col('NEXT_PRICE').alias('nextPrice'),
+                F.col('NEXT_PRICE_EFFECTIVE_DATE').alias('nextPriceEffectiveDate'),
                 'auditEvents',
                 F.col('createdTimestamp').alias('createdTimestamp')
             )
