@@ -48,12 +48,47 @@ def ai_generate_patch(jira_summary, jira_description, old_code):
     Enhanced: Handles DataFrame columns, SQL SELECT, and .withColumn chains for column addition.
     """
     import re
-    # Extract column names to add from the Jira description
+    # Try to extract column names to add from the Jira description or AI suggestion in comments
+    columns_to_add = []
+    # 1. Look for explicit column addition in Jira description
     add_column_pattern = re.compile(r"(?:add|missing|include)\s+column[s]?\s*([A-Za-z0-9_', ]+)", re.IGNORECASE)
     match = add_column_pattern.search(jira_description)
-    columns_to_add = []
     if match:
         columns_to_add = [c.strip(" '") for c in match.group(1).split(',') if c.strip()]
+    # 2. Look for AI suggestion in code comments
+    ai_suggestion_pattern = re.compile(r"AI Suggestion.*?:.*?(add|include|missing)[^\n]*column[s]?[^:]*: ([A-Za-z0-9_', ]+)", re.IGNORECASE)
+    ai_match = ai_suggestion_pattern.search(old_code)
+    if ai_match:
+        ai_cols = [c.strip(" '") for c in ai_match.group(2).split(',') if c.strip()]
+        for col in ai_cols:
+            if col not in columns_to_add:
+                columns_to_add.append(col)
+    # 3. If still nothing, look for missing columns in DataFrame assignments
+    if not columns_to_add:
+        # Try to find selected_columns assignment and see if any columns are referenced elsewhere but missing
+        import ast
+        try:
+            tree = ast.parse(old_code)
+            all_names = set()
+            for node in ast.walk(tree):
+                if isinstance(node, ast.Name):
+                    all_names.add(node.id)
+            # Look for selected_columns assignment
+            for node in ast.walk(tree):
+                if isinstance(node, ast.Assign):
+                    if hasattr(node.targets[0], 'id') and node.targets[0].id == 'selected_columns':
+                        if isinstance(node.value, (ast.List, ast.Tuple)):
+                            present = set()
+                            for elt in node.value.elts:
+                                if isinstance(elt, ast.Str):
+                                    present.add(elt.s)
+                            # If any names are referenced elsewhere but not present, add them
+                            missing = all_names - present
+                            for col in missing:
+                                if col not in columns_to_add:
+                                    columns_to_add.append(col)
+        except Exception:
+            pass
     if not columns_to_add:
         return old_code
     code = old_code
