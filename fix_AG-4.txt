@@ -1,0 +1,2 @@
+Fix for AG-4: Create a new column NEXT_PRICE for price change audit integration
+Create a new column NEXT_PRICE for price change audit integration
