@@ -17,14 +17,15 @@ def call_llm_patch(model_provider, prompt, old_code, jira_summary, jira_descript
     """
     if model_provider == 'gemini':
         try:
-            from google import genai
+            import google.generativeai as genai
         except ImportError:
-            raise ImportError("google-genai package not installed. Please install it for Gemini support.")
+            raise ImportError("google-generativeai package not installed. Please install it for Gemini support.")
         api_key = os.getenv('GEMINI_API_KEY')
         if not api_key:
             raise Exception('GEMINI_API_KEY not set in environment.')
-        client = genai.Client(api_key=api_key)
-        model = os.getenv('GEMINI_MODEL', 'gemini-2.5-flash')
+        genai.configure(api_key=api_key)
+        model_name = os.getenv('GEMINI_MODEL', 'gemini-1.5-flash')
+        model = genai.GenerativeModel(model_name)
         # Compose prompt for Gemini
         full_prompt = f"""
 You are an expert Python/SQL code patcher. Given the following Jira summary and description, and the current code, generate the fixed code as a single code block. Only output the new code, no explanations.
@@ -35,12 +36,14 @@ Jira Description: {jira_description}
 Current Code:
 {old_code}
 """
-        response = client.generate_content(model=model, prompt=full_prompt)
+        response = model.generate_content(full_prompt)
         # Gemini returns a response object; extract text
         if hasattr(response, 'text'):
             return response.text
         elif hasattr(response, 'result'):
             return response.result
+        elif hasattr(response, 'candidates') and response.candidates:
+            return response.candidates[0].text
         else:
             return str(response)
     elif model_provider == 'azure':
