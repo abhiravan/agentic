@@ -1,9 +1,8 @@
-
 from flask import Flask, render_template, request, jsonify
 import os
 import requests
 from dotenv import load_dotenv
-from mcp_bugfix import run_mcp_bugfix
+from mcp_bugfix import run_mcp_bugfix, ai_select_file
 
 load_dotenv()
 
@@ -83,6 +82,20 @@ def fix_issue():
     description = data.get('description', '')
     status_steps, message = run_mcp_bugfix(jira_number, summary, description)
     return jsonify({'status_steps': status_steps, 'message': message})
+
+@app.route('/find_source', methods=['POST'])
+def find_source():
+    data = request.get_json()
+    summary = data.get('summary', '')
+    description = data.get('description', '')
+    try:
+        candidate_files = [f for f in os.listdir('.') if f.endswith('.py') or f.endswith('.sql')]
+        best_file = ai_select_file(summary, description, candidate_files)
+        if not best_file:
+            return jsonify({'error': 'No candidate file found.'}), 404
+        return jsonify({'file': best_file})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
 
 def fetch_jira_issue(jira_number):
     url = f"{JIRA_URL}/rest/api/3/issue/{jira_number}"

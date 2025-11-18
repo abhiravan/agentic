@@ -107,6 +107,7 @@
             </div>
             <div class="btn-row">
                 <button type="submit">Fetch Jira</button>
+                <button type="button" id="findSourceBtn" onclick="findSource()">Find Source</button>
                 <button type="button" id="fixBtn" onclick="fixIssue()">Fix Issue</button>
             </div>
         </form>
@@ -154,6 +155,34 @@
         .catch(() => setStatus('Error fetching Jira details.'));
         return false;
     }
+    function findSource() {
+        const jiraNumber = document.getElementById('jira_number').value.trim();
+        const summary = document.getElementById('summary').value;
+        const description = document.getElementById('description').value;
+        if (!jiraNumber) {
+            alert('Please enter a Jira number first.');
+            return;
+        }
+        clearStatus();
+        setStatus('Finding source file for ' + jiraNumber + '...');
+        fetch('/find_source', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ jira_number: jiraNumber, summary: summary, description: description })
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.file) {
+                setStatus('AI selected file: ' + data.file);
+            } else if (data.error) {
+                setStatus('Error: ' + data.error);
+            }
+        })
+        .catch(() => {
+            setStatus('Error finding source file.');
+        });
+    }
+
     function fixIssue() {
         const jiraNumber = document.getElementById('jira_number').value.trim();
         const summary = document.getElementById('summary').value;
