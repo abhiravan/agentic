@@ -82,6 +82,7 @@ def fix_issue():
     summary = data.get('summary', '')
     description = data.get('description', '')
     status_steps = [f"Received request to fix {jira_number}"]
+    import patch_utils
     GITHUB_TOKEN = os.getenv("GITHUB_TOKEN")
     REPO = "abhiravan/agentic"
     github_client = GitHubClient(GITHUB_TOKEN, REPO)
@@ -98,16 +99,26 @@ def fix_issue():
         if new_code == old_code:
             status_steps.append("AI did not generate any changes. No fix applied.")
             return jsonify({'status_steps': status_steps, 'message': 'No code changes were made.'})
-        # 1. Create branch
+        # 1. Ensure main is up to date and create branch
+        import subprocess
         branch = f"fb_{jira_number}"
-        github_client.create_branch(branch, from_branch="main")
-        status_steps.append(f"Created branch {branch}.")
-        # 2. Update file in branch
-        github_client.update_file(best_file, new_code, branch, f"fix({jira_number}): {summary}")
-        status_steps.append(f"Updated {best_file} in branch {branch}.")
-        # 3. Create PR
+        subprocess.run(["git", "checkout", "main"], check=True)
+        subprocess.run(["git", "pull"], check=True)
+        subprocess.run(["git", "checkout", "-B", branch], check=True)
+        status_steps.append(f"Created/checked out branch {branch}.")
+        # 2. Apply patch
+        patch_utils.apply_patch(best_file, new_code)
+        status_steps.append(f"Applied AI-generated fix to {best_file}.")
+        # 3. Commit
+        commit_msg = f"fix({jira_number}): {summary}"
+        patch_utils.commit_all(commit_msg)
+        status_steps.append(f"Committed fix with message: {commit_msg}")
+        # 4. Push branch
+        patch_utils.push_branch(branch)
+        status_steps.append(f"Pushed branch {branch} to origin.")
+        # 5. Create PR via GitHub API
         pr = github_client.create_pull_request(
-            title=f"fix({jira_number}): {summary}",
+            title=commit_msg,
             body=description,
             head=branch,
             base="main"
