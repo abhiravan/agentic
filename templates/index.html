@@ -204,6 +204,9 @@
                 data.status_steps.forEach(step => setStatus(step));
             }
             setStatus(data.message);
+            if (data.message && data.message.includes('No code changes were made')) {
+                setStatus('No code changes were made. The workflow exited early and no branch or PR was created.');
+            }
         })
         .catch(() => {
             setStatus('Error triggering bug fix workflow.');
