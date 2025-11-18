@@ -147,8 +147,9 @@ except Exception as e:
 
 from pyspark.sql.functions import concat_ws
 from pyspark.sql.functions import current_timestamp
-selected_columns = df_pchg_audtt[[
+selected_columns = df_pchg_audtt[[]
     'ROG', 'PRICE_AREA', 'PRICE_GROUP_ID', 'NEW_PRICE', 'NEW_PRICE_EFFECTIVE_DATE',
+    'NEXT_PRICE', 'NEXT_PRICE_EFFECTIVE_DATE',
     'CURRENT_PRICE', 'CALCULATED_PRICE', 'CURRENT_COST', 'CURRENT_COST_EFFECTIVE_DATE',
     'FUTURE_COST', 'FUTURE_COST_EFFECTIVE_DATE',
     'MULTI_FACTOR_PRICE', 'MULTI_FACTOR_QUANTITY',
