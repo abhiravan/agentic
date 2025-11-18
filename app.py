@@ -2,7 +2,80 @@ from flask import Flask, render_template, request, jsonify
 import os
 import requests
 from dotenv import load_dotenv
-from mcp_bugfix import run_mcp_bugfix, ai_select_file, ai_generate_patch
+from mcp_bugfix import run_mcp_bugfix, ai_select_file
+import os
+import requests
+import importlib
+import json
+import sys
+import types
+import traceback
+
+def call_llm_patch(model_provider, prompt, old_code, jira_summary, jira_description):
+    """
+    Call the selected LLM provider (gemini or azure) to generate a code patch.
+    """
+    if model_provider == 'gemini':
+        try:
+            from google import genai
+        except ImportError:
+            raise ImportError("google-genai package not installed. Please install it for Gemini support.")
+        api_key = os.getenv('GEMINI_API_KEY')
+        if not api_key:
+            raise Exception('GEMINI_API_KEY not set in environment.')
+        client = genai.Client(api_key=api_key)
+        model = os.getenv('GEMINI_MODEL', 'gemini-2.5-flash')
+        # Compose prompt for Gemini
+        full_prompt = f"""
+You are an expert Python/SQL code patcher. Given the following Jira summary and description, and the current code, generate the fixed code as a single code block. Only output the new code, no explanations.
+
+Jira Summary: {jira_summary}
+Jira Description: {jira_description}
+
+Current Code:
+{old_code}
+"""
+        response = client.generate_content(model=model, prompt=full_prompt)
+        # Gemini returns a response object; extract text
+        if hasattr(response, 'text'):
+            return response.text
+        elif hasattr(response, 'result'):
+            return response.result
+        else:
+            return str(response)
+    elif model_provider == 'azure':
+        try:
+            from openai import AzureOpenAI
+        except ImportError:
+            raise ImportError("openai package not installed. Please install it for Azure OpenAI support.")
+        api_key = os.getenv('AZURE_OPENAI_API_KEY')
+        endpoint = os.getenv('AZURE_OPENAI_ENDPOINT')
+        api_version = os.getenv('AZURE_OPENAI_API_VERSION', '2023-07-01-preview')
+        if not api_key or not endpoint:
+            raise Exception('AZURE_OPENAI_API_KEY or AZURE_OPENAI_ENDPOINT not set in environment.')
+        client = AzureOpenAI(azure_endpoint=endpoint, api_key=api_key, api_version=api_version)
+        deployment = os.getenv('AZURE_OPENAI_DEPLOYMENT', 'gpt-4')
+        full_prompt = f"""
+You are an expert Python/SQL code patcher. Given the following Jira summary and description, and the current code, generate the fixed code as a single code block. Only output the new code, no explanations.
+
+Jira Summary: {jira_summary}
+Jira Description: {jira_description}
+
+Current Code:
+{old_code}
+"""
+        response = client.chat.completions.create(
+            model=deployment,
+            messages=[{"role": "user", "content": full_prompt}],
+            max_tokens=4096,
+            temperature=0.1
+        )
+        # Azure returns a response object; extract text
+        if hasattr(response, 'choices') and response.choices:
+            return response.choices[0].message.content
+        return str(response)
+    else:
+        raise Exception(f"Unknown model provider: {model_provider}")
 from github_client import GitHubClient
 
 load_dotenv()
@@ -86,6 +159,7 @@ def fix_issue():
     GITHUB_TOKEN = os.getenv("GITHUB_TOKEN")
     REPO = "abhiravan/agentic"
     github_client = GitHubClient(GITHUB_TOKEN, REPO)
+    model_provider = os.getenv('LLM_PROVIDER', 'gemini')  # 'gemini' or 'azure'
     try:
         candidate_files = [f for f in os.listdir('.') if f.endswith('.py') or f.endswith('.sql')]
         best_file = ai_select_file(summary, description, candidate_files)
@@ -95,8 +169,9 @@ def fix_issue():
         status_steps.append(f"Selected file for fix: {best_file}")
         with open(best_file, 'r', encoding='utf-8') as f:
             old_code = f.read()
-        new_code = ai_generate_patch(summary, description, old_code)
-        if new_code == old_code:
+        # Use LLM to generate patch
+        new_code = call_llm_patch(model_provider, '', old_code, summary, description)
+        if not new_code or new_code.strip() == old_code.strip():
             status_steps.append("AI did not generate any changes. No fix applied.")
             return jsonify({'status_steps': status_steps, 'message': 'No code changes were made.'})
         # 1. Ensure main is up to date and create branch
@@ -108,7 +183,7 @@ def fix_issue():
         status_steps.append(f"Created/checked out branch {branch}.")
         # 2. Apply patch
         patch_utils.apply_patch(best_file, new_code)
-        status_steps.append(f"Applied AI-generated fix to {best_file}.")
+        status_steps.append(f"Applied LLM-generated fix to {best_file}.")
         # 3. Commit
         commit_msg = f"fix({jira_number}): {summary}"
         patch_utils.commit_all(commit_msg)
