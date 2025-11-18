@@ -1,2 +1,0 @@
-Fix for AG-3: Columns missing in Price change audit extract
-Two columns ‘NEXT_PRICE’ and 'NEXT_PRICE_EFFECTIVE_DATE' were missing in the extract for price change audit. Update extract to include those
