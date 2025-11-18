@@ -1,0 +1,2 @@
+Fix for AG-1: Include discount_type column also in the report code of complex promotion along with banner, tactic in select
+Include discount_type column also in the report code of complex promotion along with banner, tactic in select.
