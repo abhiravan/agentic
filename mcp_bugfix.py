@@ -45,10 +45,51 @@ def ai_select_file(jira_summary, jira_description, repo_files):
 
 def ai_generate_patch(jira_summary, jira_description, old_code):
     """
-    Generate the new code based on Jira description. STRICT: Only apply the described change.
-    This is a placeholder for LLM integration. For now, returns old_code unchanged.
+    Use simple pattern matching to add a column to a DataFrame or SQL SELECT if the Jira description requests it.
+    This is a generic AI-inspired patcher for Python and SQL files.
     """
-    # TODO: Integrate with LLM for real patching
+    # Extract column names to add from the Jira description
+    add_column_pattern = re.compile(r"add(?:\s+column)?\s+([A-Za-z0-9_']+)", re.IGNORECASE)
+    columns_to_add = add_column_pattern.findall(jira_description)
+    if not columns_to_add:
+        # Try to find 'missing column' or 'include column' patterns
+        missing_pattern = re.compile(r"(?:missing|include)\s+column[s]?\s*([A-Za-z0-9_', ]+)", re.IGNORECASE)
+        match = missing_pattern.search(jira_description)
+        if match:
+            columns_to_add = [c.strip(" '") for c in match.group(1).split(',') if c.strip()]
+    if not columns_to_add:
+        return old_code
+    # Patch Python DataFrame column lists
+    if 'selected_columns' in old_code:
+        lines = old_code.splitlines()
+        new_lines = []
+        in_columns = False
+        for line in lines:
+            if 'selected_columns' in line and '[[' in line:
+                in_columns = True
+                new_lines.append(line)
+                continue
+            if in_columns and ']]' in line:
+                # Insert new columns before closing
+                for col in columns_to_add:
+                    col_str = col.strip(" '")
+                    if f"'{col_str}'" not in ''.join(new_lines):
+                        new_lines.append(f"    '{col_str}',")
+                in_columns = False
+            new_lines.append(line)
+        return '\n'.join(new_lines)
+    # Patch SQL SELECT lists
+    if re.search(r'select\s', old_code, re.IGNORECASE):
+        # Try to add columns to the SELECT clause
+        select_match = re.search(r'(select\s+)([\s\S]+?)(from\s)', old_code, re.IGNORECASE)
+        if select_match:
+            select_cols = select_match.group(2)
+            for col in columns_to_add:
+                col_str = col.strip(" '")
+                if col_str.lower() not in select_cols.lower():
+                    select_cols = select_cols + f', {col_str}'
+            new_code = old_code[:select_match.start(2)] + select_cols + old_code[select_match.end(2):]
+            return new_code
     return old_code
 
 def run_mcp_bugfix(jira_number, summary, description):
